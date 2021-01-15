@@ -281,11 +281,7 @@ def test_edit_tracker(client, api_version, client_func, orig_torrent):
 
 
 @pytest.mark.parametrize(
-    "trackers",
-    (
-        ("127.2.0.1",),
-        ("127.2.0.2", "127.2.0.3"),
-    ),
+    "trackers", (("127.2.0.1",), ("127.2.0.2", "127.2.0.3"),),
 )
 @pytest.mark.parametrize(
     "client_func", ("torrents_remove_trackers", "torrents_removeTrackers")
@@ -326,18 +322,58 @@ def test_rename(client, orig_torrent_hash, orig_torrent, new_name):
 @pytest.mark.parametrize("new_name", ("new name file 2", "new_name_file_2"))
 @pytest.mark.parametrize("client_func", ("torrents_rename_file", "torrents_renameFile"))
 def test_rename_file(
-    client, api_version, orig_torrent_hash, orig_torrent, new_name, client_func
+    client, api_version, new_torrent, new_name, client_func,
 ):
     if is_version_less_than(api_version, "2.4.0", lteq=False):
         with pytest.raises(NotImplementedError):
             getattr(client, client_func)(
-                torrent_hash=orig_torrent_hash, file_id=0, new_file_name=new_name[0]
+                torrent_hash=new_torrent.hash, file_id=0, new_file_name=new_name
             )
     else:
         getattr(client, client_func)(
-            torrent_hash=orig_torrent_hash, file_id=0, new_file_name=new_name[0]
+            torrent_hash=new_torrent.hash, file_id=0, new_file_name=new_name
         )
-        check(lambda: orig_torrent.files[0].name.replace("+", " "), new_name[0])
+        check(lambda: new_torrent.files[0].name.replace("+", " "), new_name)
+
+    if is_version_less_than("2.7.1", api_version, lteq=True):
+        getattr(client, client_func)(
+            torrent_hash=new_torrent.hash,
+            old_path=new_torrent.files[0].name,
+            new_path=new_name + "_new",
+        )
+        check(lambda: new_torrent.files[0].name.replace("+", " "), new_name + "_new")
+
+
+@pytest.mark.parametrize("new_name", ("asdf zxcv", "asdf_zxcv"))
+@pytest.mark.parametrize(
+    "client_func", ("torrents_rename_folder", "torrents_renameFolder")
+)
+def test_rename_folder(
+    client, api_version, new_torrent, new_name, client_func,
+):
+    if is_version_less_than(api_version, "2.7.1", lteq=False):
+        with pytest.raises(NotImplementedError):
+            getattr(client, client_func)(
+                torrent_hash="asdf", old_path="asdf", new_path="zxcv"
+            )
+    else:
+        # move the file in to a new folder
+        orig_file_path = new_torrent.files[0].name
+        new_folder = "qwer"
+        client.torrents_rename_file(
+            torrent_hash=new_torrent.hash,
+            old_path=orig_file_path,
+            new_path=new_folder + "/" + orig_file_path,
+        )
+        sleep(1)  # qBittorrent crashes if you make these calls too fast...
+        # test rename that new folder
+        getattr(client, client_func)(
+            torrent_hash=new_torrent.hash, old_path=new_folder, new_path=new_name,
+        )
+        check(
+            lambda: new_torrent.files[0].name.replace("+", " "),
+            new_name + "/" + orig_file_path,
+        )
 
 
 @pytest.mark.parametrize("client_func", ("torrents_info", "torrents.info"))
@@ -853,11 +889,7 @@ def test_remove_category(client, api_version, orig_torrent, client_func, categor
 
 
 @pytest.mark.parametrize(
-    "client_func",
-    (
-        "torrents_tags",
-        "torrent_tags.tags",
-    ),
+    "client_func", ("torrents_tags", "torrent_tags.tags",),
 )
 def test_tags(client, api_version, client_func):
     if is_version_less_than(api_version, "2.3.0", lteq=False):

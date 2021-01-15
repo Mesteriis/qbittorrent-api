@@ -325,13 +325,42 @@ def test_reannounce(client, api_version, orig_torrent):
 
 @pytest.mark.parametrize("client_func", ("rename_file", "renameFile"))
 @pytest.mark.parametrize("name", ("new_name", "new name"))
-def test_rename_file(api_version, orig_torrent, client_func, name):
+def test_rename_file(api_version, new_torrent, client_func, name):
     if is_version_less_than(api_version, "2.4.0", lteq=False):
         with pytest.raises(NotImplementedError):
-            getattr(orig_torrent, client_func)(file_id=0, new_file_name=name)
+            getattr(new_torrent, client_func)(file_id=0, new_file_name=name)
     else:
-        getattr(orig_torrent, client_func)(file_id=0, new_file_name=name)
-        check(lambda: orig_torrent.files[0].name, name)
+        getattr(new_torrent, client_func)(file_id=0, new_file_name=name)
+        check(lambda: new_torrent.files[0].name, name)
+
+    if is_version_less_than("2.7.1", api_version, lteq=True):
+        curr_name = new_torrent.files[0].name
+        getattr(new_torrent, client_func)(old_path=curr_name, new_path=name + "_new")
+        check(lambda: new_torrent.files[0].name, name + "_new")
+
+
+@pytest.mark.parametrize("client_func", ("rename_folder", "renameFolder"))
+@pytest.mark.parametrize("name", ("new_name", "new name"))
+def test_rename_folder(api_version, new_torrent, client_func, name):
+    if is_version_less_than(api_version, "2.7.1", lteq=False):
+        with pytest.raises(NotImplementedError):
+            getattr(new_torrent, client_func)(old_path="", new_path="")
+    else:
+        # move the file in to a new folder
+        orig_file_path = new_torrent.files[0].name
+        new_folder = "qwer"
+        new_torrent.rename_file(
+            old_path=orig_file_path, new_path=new_folder + "/" + orig_file_path,
+        )
+        sleep(1)  # qBittorrent crashes if you make these calls too fast...
+        # test rename that new folder
+        getattr(new_torrent, client_func)(
+            old_path=new_folder, new_path=name,
+        )
+        check(
+            lambda: new_torrent.files[0].name.replace("+", " "),
+            name + "/" + orig_file_path,
+        )
 
 
 @pytest.mark.parametrize("client_func", ("piece_states", "pieceStates"))

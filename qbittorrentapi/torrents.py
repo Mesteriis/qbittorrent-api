@@ -243,11 +243,24 @@ class TorrentDictionary(Dictionary):
         return self._client.torrents_files(torrent_hash=self._torrent_hash)
 
     @Alias("renameFile")
-    def rename_file(self, file_id=None, new_file_name=None, **kwargs):
+    def rename_file(
+        self, file_id=None, new_file_name=None, old_path=None, new_path=None, **kwargs
+    ):
         self._client.torrents_rename_file(
             torrent_hash=self._torrent_hash,
             file_id=file_id,
             new_file_name=new_file_name,
+            old_path=old_path,
+            new_path=new_path,
+            **kwargs
+        )
+
+    @Alias("renameFolder")
+    def rename_folder(self, old_path=None, new_path=None, **kwargs):
+        self._client.torrents_rename_folder(
+            torrent_hash=self._torrent_hash,
+            old_path=old_path,
+            new_path=new_path,
             **kwargs
         )
 
@@ -1276,7 +1289,13 @@ class TorrentsAPIMixIn(Request):
     @Alias("torrents_renameFile")
     @login_required
     def torrents_rename_file(
-        self, torrent_hash=None, file_id=None, new_file_name=None, **kwargs
+        self,
+        torrent_hash=None,
+        file_id=None,
+        new_file_name=None,
+        old_path=None,
+        new_path=None,
+        **kwargs
     ):
         """
         Rename a torrent file.
@@ -1286,16 +1305,58 @@ class TorrentsAPIMixIn(Request):
         :raises Conflict409Error:
 
         :param torrent_hash: hash for torrent
-        :param file_id: id for file
-        :param new_file_name: new name for file
+        :param file_id: id for file (removed in Web API v2.7.1)
+        :param new_file_name: new name for file (removed in Web API v2.7.1)
+        :param old_path: path of file to rename (added in Web API v2.7.1)
+        :param new_path: new path of file to rename (added in Web API v2.7.1)
+        :return: None
+        """
+        torrent_hash = torrent_hash or kwargs.pop("hash")
+
+        # convert pre-v2.7.1 params to post-v2.7.1 params if a newer qBittorrent is being used
+        api_version = self._app_web_api_version_from_version_checker()
+        if (
+            old_path is None
+            and new_path is None
+            and isinstance(file_id, int)
+            and self._is_version_less_than("2.7", api_version, lteq=True)
+        ):
+            old_path = self.torrents_files(torrent_hash=torrent_hash)[file_id].name
+            new_path = new_file_name
+
+        data = {
+            "hash": torrent_hash,
+            "id": file_id,
+            "name": new_file_name,
+            "oldPath": old_path,
+            "newPath": new_path,
+        }
+        self._post(_name=APINames.Torrents, _method="renameFile", data=data, **kwargs)
+
+    @endpoint_introduced("2.7.1", "torrents/renameFolder")
+    @Alias("torrents_renameFolder")
+    @login_required
+    def torrents_rename_folder(
+        self, torrent_hash=None, old_path=None, new_path=None, **kwargs
+    ):
+        """
+        Rename a torrent folder.
+
+        :raises MissingRequiredParameters400Error:
+        :raises NotFound404Error:
+        :raises Conflict409Error:
+
+        :param torrent_hash: hash for torrent
+        :param old_path: path of file to rename (added in Web API v2.7.1)
+        :param new_path: new path of file to rename (added in Web API v2.7.1)
         :return: None
         """
         data = {
             "hash": torrent_hash or kwargs.pop("hash"),
-            "id": file_id,
-            "name": new_file_name,
+            "oldPath": old_path,
+            "newPath": new_path,
         }
-        self._post(_name=APINames.Torrents, _method="renameFile", data=data, **kwargs)
+        self._post(_name=APINames.Torrents, _method="renameFolder", data=data, **kwargs)
 
     ##########################################################################
     # MULTIPLE TORRENT ENDPOINTS

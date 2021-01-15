@@ -527,7 +527,7 @@ class Request(object):
                     "Request body: %s%s"
                     % (
                         response.request.body[:body_len],
-                        "...<truncated>" if body_len >= 80 else "",
+                        "...<truncated>" if body_len >= 200 else "",
                     )
                 )
 
